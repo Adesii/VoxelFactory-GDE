@@ -26,11 +26,15 @@ class VoxelWorld : public Node3D {
 
 private:
 	GenerateQueue<VoxelChunk *> inactive_chunks;
+	GenerateQueue<VoxelChunk *> inactive_upper_chunks;
 	std::vector<VoxelChunk *> wait_tree_chunks;
 	std::unordered_map<Vector3i, NodePath, Vector3Hasher> chunks;
 	std::mutex mutex;
 
 	std::vector<Ref<Thread>> threads;
+	std::vector<Ref<Thread>> upperthreads;
+
+	Node *chunk_holder_node;
 
 protected:
 	CompleteQueue<meshResult *> Finished_chunks;
@@ -38,6 +42,7 @@ protected:
 	void _notification(int p_what);
 	static void _bind_methods();
 	void generate_chunk_thread_loop();
+	void upper_generate_chunk_thread_loop();
 
 	int32_t view_distance = 10;
 

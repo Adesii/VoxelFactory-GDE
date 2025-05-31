@@ -340,13 +340,11 @@ Array ChunkMesher::MeshChunk(PackedInt32Array &voxels, Ref<ArrayMesh> &mesh, boo
 			}
 		}
 	}
-	if (verts.size() > 0) {
-		hasverts = true;
-	}
 	arrays[Mesh::ARRAY_VERTEX] = verts;
 	arrays[Mesh::ARRAY_NORMAL] = normals;
 	if (!verts.is_empty()) {
 		arrays[Mesh::ARRAY_INDEX] = generate_indices(verts.size());
+		hasverts = true;
 	}
 	//mesh->call_deferred("add_surface_from_arrays", Mesh::PRIMITIVE_TRIANGLES, arrays);
 

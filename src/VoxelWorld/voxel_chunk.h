@@ -40,14 +40,14 @@ public:
 	void set_chunk_position(Vector3i pos) {
 		mutex->lock();
 		chunk_position = pos;
-		set_global_position(pos * ChunkSize);
+		call_deferred("set_global_position", pos * ChunkSize);
 		threaded_global_pos = pos * ChunkSize;
 		mutex->unlock();
 	}
 	Vector3i get_chunk_position() const {
-		//mutex->lock();
+		mutex->lock();
 		auto ret = chunk_position;
-		//mutex->unlock();
+		mutex->unlock();
 		return ret;
 	}
 

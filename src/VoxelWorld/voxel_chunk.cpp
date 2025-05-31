@@ -1,4 +1,5 @@
 #include "voxel_chunk.h"
+#include "VoxelWorld.h"
 #include "godot_cpp/classes/array_mesh.hpp"
 #include "godot_cpp/classes/mesh_instance3d.hpp"
 #include "godot_cpp/classes/mutex.hpp"
@@ -15,7 +16,6 @@
 #include "mesher.h"
 #include "util/MultiThreadQueues.h"
 #include <mutex>
-
 void VoxelChunk::_bind_methods() {
 	// Bind methods here if needed
 }
@@ -93,10 +93,11 @@ void VoxelChunk::init(VoxelWorld *w, Ref<FastNoiseLite> g_world, CompleteQueue<m
 	ChunkMesher mesher;
 	meshResult *result = memnew(meshResult);
 	if (should_gen_chunk_above) {
-		print_line("Generating chunk above for position: ", chunk_above);
+		//print_line("Generating chunk above for position: ", chunk_above);
 		//generate_chunk_above(voxels, noiseOutputbiomemap, mesh);
-		result->gen_new_pos = chunk_above;
-		result->should_gen_new_chunk = true;
+		w->gen_chunk(chunk_above);
+		//result->gen_new_pos = chunk_above;
+		result->should_gen_new_chunk = false;
 	} else {
 		result->should_gen_new_chunk = false;
 		result->gen_new_pos = Vector3i(0, 0, 0);

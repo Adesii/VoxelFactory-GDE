@@ -1,8 +1,13 @@
 #include "VoxelWorld.h"
 #include "godot_cpp/classes/array_mesh.hpp"
+#include "godot_cpp/classes/camera3d.hpp"
+#include "godot_cpp/classes/engine.hpp"
 #include "godot_cpp/classes/mutex.hpp"
+#include "godot_cpp/classes/node.hpp"
 #include "godot_cpp/classes/ref.hpp"
+#include "godot_cpp/classes/rendering_server.hpp"
 #include "godot_cpp/classes/thread.hpp"
+#include "godot_cpp/classes/viewport.hpp"
 #include "godot_cpp/classes/worker_thread_pool.hpp"
 #include "godot_cpp/core/class_db.hpp"
 #include "godot_cpp/core/memory.hpp"
@@ -26,6 +31,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <vector>
 
 VoxelWorld::VoxelWorld() {
 	chunk_mutex.instantiate();
@@ -51,11 +57,11 @@ void VoxelWorld::init() {
 	// Initialize the voxel world
 	godot::UtilityFunctions::print("Initializing voxel world\n");
 	//debug generate a 10x0x10 grid of chunks
-	for (int x = -view_distance; x <= view_distance; ++x) {
-		for (int z = -view_distance; z <= view_distance; ++z) {
-			gen_new_chunk_threaded_queue(Vector3i(x, 0, z));
-		}
-	}
+	//for (int x = -view_distance; x <= view_distance; ++x) {
+	//	for (int z = -view_distance; z <= view_distance; ++z) {
+	//		gen_new_chunk_threaded_queue(Vector3i(x, 0, z));
+	//	}
+	//}
 	set_physics_process(true);
 	//generate();
 }
@@ -71,12 +77,20 @@ void VoxelWorld::generate() {
 		thread->start(callable_mp(this, &VoxelWorld::generate_chunk_thread_loop), Thread::PRIORITY_NORMAL);
 		godot::UtilityFunctions::print("Thread ", i, " started\n");
 	}
+	//for (size_t i = 0; i < threadcount; ++i) {
+	//	Ref<Thread> thread;
+	//	thread.instantiate();
+	//	//WorkerThreadPool::get_singleton()->add_native_task(VoxelWorld::generate_chunk_thread_loop,this);
+	//	upperthreads.push_back(thread);
+	//	thread->start(callable_mp(this, &VoxelWorld::upper_generate_chunk_thread_loop), Thread::PRIORITY_NORMAL);
+	//	godot::UtilityFunctions::print("upperThread ", i, " started\n");
+	//}
 }
 
 void VoxelWorld::gen_new_chunk_threaded_queue(Vector3i pos) {
-	godot::UtilityFunctions::print("Generating new chunk at ", pos, "\n");
+	//godot::UtilityFunctions::print("Generating new chunk at ", pos, "\n");
 	VoxelChunk *chunk = memnew(VoxelChunk);
-	add_child(chunk);
+	chunk_holder_node->add_child(chunk);
 	chunk->set_chunk_position(Vector3i(pos.x, pos.y, pos.z));
 	chunk->set_name("Chunk_" + Variant(pos.x).stringify() + "_" + Variant(pos.y).stringify() + "_" + Variant(pos.z).stringify());
 	add_chunk(chunk);
@@ -87,21 +101,25 @@ void VoxelWorld::add_chunk(VoxelChunk *chunk) {
 	chunk->main_thread_init();
 	chunks[chunk->chunk_position] = chunk->get_path();
 	wait_tree_chunks.emplace_back(chunk);
-	godot::UtilityFunctions::print("Added chunk at ", chunk->chunk_position, "\n");
+	//godot::UtilityFunctions::print("Added chunk at ", chunk->chunk_position, "\n");
 }
 void VoxelWorld::queue_chunk(VoxelChunk *chunk) {
 	std::unique_lock<std::mutex> lock(mutex);
-	inactive_chunks.Push(chunk);
+	if (chunk->chunk_position.y == 0)
+		inactive_chunks.Push(chunk);
+	else
+		inactive_upper_chunks.Push(chunk);
 }
 void VoxelWorld::gen_chunk(const Vector3i &pos) {
 	VoxelChunk *chunk = memnew(VoxelChunk);
+	chunk_holder_node->call_deferred("add_child", chunk);
 	chunk->main_thread_init();
 	chunk->set_chunk_position(pos);
-	if (chunks.try_emplace(pos, chunk->get_path()).second) {
-		chunk->init(this, noise, &Finished_chunks, pos); //TODO: Initialize the chunk
-
-		add_child(chunk);
-	}
+	chunk->call_deferred("set_name", "Chunk_" + Variant(pos.x).stringify() + "_" + Variant(pos.y).stringify() + "_" + Variant(pos.z).stringify());
+	mutex.lock();
+	chunks[pos] = NodePath("chunks/Chunk_" + Variant(pos.x).stringify() + "_" + Variant(pos.y).stringify() + "_" + Variant(pos.z).stringify());
+	chunk->init(this, noise, &Finished_chunks, pos); //TODO: Initialize the chunk
+	mutex.unlock();
 }
 bool VoxelWorld::has_chunk(const Vector3i &pos) const {
 	return chunks.find(pos) != chunks.end();
@@ -122,22 +140,15 @@ void VoxelWorld::_notification(int p_what) {
 bool generating = false;
 
 void VoxelWorld::single_thread_generate() {
-	if (!generating && timesincence > 0.1f) {
-		//godot::UtilityFunctions::print("Generating chunks... single thread\n");
+	if (timesincence <= 0.1f)
+		return;
+	if (!generating) {
 		generating = true;
+		Node *chunk_holder = memnew(Node);
+		chunk_holder->set_name("chunks");
+		add_child(chunk_holder);
+		chunk_holder_node = chunk_holder;
 		generate(); //TODO: figure out how to properly handle scene starts
-		//VoxelChunk* c = inactive_chunks.Pop();
-		//if (c == nullptr){
-		//	generating = false;
-		//    return;
-		//}
-		//c->init(this, noise);
-		//generating = false;
-
-		//if (inactive_chunks.Count() > 0) {
-		//	VoxelChunk* c = inactive_chunks.Pop();
-		//	c->init(this, noise, Finished_chunks); //TODO: Initialize the chunk
-		//}
 	}
 	for (size_t i = 0; i < wait_tree_chunks.size(); i++) {
 		VoxelChunk *c = wait_tree_chunks[i];
@@ -151,15 +162,12 @@ void VoxelWorld::single_thread_generate() {
 		meshResult *c = memnew(meshResult(Array(), Vector3i(0, 0, 0), false));
 		Finished_chunks.Pop(c);
 		if (chunks.find(c->position) == chunks.end()) {
-			print_line("chunk not found in chunks map");
+			//print_line("chunk not found in chunks map");
 			return;
 		}
 		NodePath chunkPath = chunks.at(c->position);
-		//if(chunkPath.is_empty()){
-		//	print_line("chunk path is empty");
-		//	return;
-		//}
-		print_line("chunk found in chunks map at " + chunkPath);
+
+		//print_line("chunk found in chunks map at " + chunkPath);
 		VoxelChunk *chunk = get_node<VoxelChunk>(chunkPath);
 		if (chunk) {
 			chunk->mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, c->mesh_data);
@@ -167,33 +175,54 @@ void VoxelWorld::single_thread_generate() {
 			if (c->should_gen_new_chunk) {
 				gen_new_chunk_threaded_queue(c->gen_new_pos);
 			}
+			chunk->set_chunk_position(c->position);
 
-			print_line("chunk generated and set mesh");
+			//print_line("chunk generated and set mesh");
 		}
 	}
-	/* std::array<VoxelChunk*,8> work_group;
-	Vector3i playerPos = Vector3i(0,0,0);//TODO: Get player position
-		godot::UtilityFunctions::print("Generating chunks...\n");
-		for (size_t i = 0; i < 8; i++)
-		{
-			VoxelChunk* c = inactive_chunks.Pop();
-			if (c == nullptr)
-				continue;
-			auto chunk_pos = c->get_global_position();
-			auto xDistance = std::abs(playerPos.x - chunk_pos.x);
-			auto zDistance = std::abs(playerPos.z - chunk_pos.z);
-			if (xDistance > view_distance || zDistance > view_distance)
-				work_group[i] = c;
-			else
-				work_group[i]->queue_free();
+	if (!chunk_holder_node || (chunk_holder_node && !chunk_holder_node->is_node_ready()))
+		return;
+
+	std::vector<VoxelChunk *> chunks_to_unload;
+	Camera3D *cam = get_viewport()->get_camera_3d();
+	Vector3i cam_position = cam->get_global_position() / VoxelChunk::ChunkSize;
+	for (int32_t child_id = 0; child_id < chunk_holder_node->get_child_count(); ++child_id) {
+		VoxelChunk *child = (VoxelChunk *)chunk_holder_node->get_child(child_id);
+		if (child == nullptr) {
+			continue;
 		}
-		for (auto chunk : work_group)
-		{
-			if (chunk != nullptr)
-			{
-				chunk->init(this,noise); //TODO: Init Chunks
+		if (Vector3Util::DistanceXZTo(child->chunk_position, cam_position) > float(view_distance) && child->get_mesh().is_valid()) {
+			chunks_to_unload.emplace_back(child);
+			continue;
+		}
+	}
+	for (VoxelChunk *chunk : chunks_to_unload) {
+		chunk->queue_free();
+		chunks.erase(chunk->chunk_position);
+	}
+	int pos_x = cam_position.x;
+	int pos_z = cam_position.z;
+	int x, y, dx, dy;
+	x = y = dx = 0;
+	dy = -1;
+	int t = view_distance;
+	int maxI = t * t;
+	for (int i = 0; i < maxI; i++) {
+		if ((-view_distance / 2 <= x) && (x <= view_distance / 2) && (-view_distance / 2 <= y) && (y <= view_distance / 2)) {
+			auto pos = Vector3i(pos_x + x, 0, pos_z + y);
+			//print_line("Checking chunk at ", pos, " iterator:", x, ",", y);
+			if (!has_chunk(pos)) {
+				gen_new_chunk_threaded_queue(pos);
 			}
-		} */
+		}
+		if ((x == y) || ((x < 0) && (x == -y)) || ((x > 0) && (x == 1 - y))) {
+			t = dx;
+			dx = -dy;
+			dy = t;
+		}
+		x += dx;
+		y += dy;
+	}
 }
 
 void VoxelWorld::generate_chunk_thread_loop() {
@@ -201,14 +230,14 @@ void VoxelWorld::generate_chunk_thread_loop() {
 	ChunkMesher mesher;
 	Vector3i playerPos = Vector3i(0, 0, 0); //TODO: Get player position
 	while (true) {
-		godot::UtilityFunctions::print("Generating chunks...\n");
-		for (size_t i = 0; i < 8; i++) {
+		//godot::UtilityFunctions::print("Generating chunks...\n");
+		for (size_t i = 0; i < 2; i++) {
 			VoxelChunk *c = inactive_chunks.Pop();
 			if (c == nullptr)
 				continue;
-			auto chunk_pos = c->threaded_global_pos;
-			auto xDistance = std::abs(playerPos.x - chunk_pos.x) / VoxelChunk::ChunkSize;
-			auto zDistance = std::abs(playerPos.z - chunk_pos.z) / VoxelChunk::ChunkSize;
+			//auto chunk_pos = c->threaded_global_pos;
+			//auto xDistance = std::abs(playerPos.x - chunk_pos.x) / VoxelChunk::ChunkSize;
+			//auto zDistance = std::abs(playerPos.z - chunk_pos.z) / VoxelChunk::ChunkSize;
 			//if (xDistance > view_distance || zDistance > view_distance)
 			c->init(this, noise, &Finished_chunks, Vector3i(c->chunk_position));
 			//else
@@ -217,16 +246,30 @@ void VoxelWorld::generate_chunk_thread_loop() {
 		if (inactive_chunks.ShouldKillThread()) {
 			break;
 		}
-		//for (auto chunk : work_group)
-		//{
-		//    if (chunk != nullptr)
-		//    {
-		//		//chunk->call_deferred("set_mesh", mesh);
-		//		//chunk_mutex->lock();
-		//		chunk->init(this,noise,&Finished_chunks,Vector3i(chunk->chunk_position));
-		//		//chunk_mutex->unlock();
-		//    }
-		//}
+	}
+}
+
+void VoxelWorld::upper_generate_chunk_thread_loop() {
+	std::array<VoxelChunk *, 8> work_group;
+	ChunkMesher mesher;
+	Vector3i playerPos = Vector3i(0, 0, 0); //TODO: Get player position
+	while (true) {
+		//godot::UtilityFunctions::print("Generating chunks...\n");
+		for (size_t i = 0; i < 2; i++) {
+			VoxelChunk *c = inactive_upper_chunks.Pop();
+			if (c == nullptr)
+				continue;
+			//auto chunk_pos = c->threaded_global_pos;
+			//auto xDistance = std::abs(playerPos.x - chunk_pos.x) / VoxelChunk::ChunkSize;
+			//auto zDistance = std::abs(playerPos.z - chunk_pos.z) / VoxelChunk::ChunkSize;
+			//if (xDistance > view_distance || zDistance > view_distance)
+			c->init(this, noise, &Finished_chunks, Vector3i(c->chunk_position));
+			//else
+			//    work_group[i]->call_deferred("queue_free");
+		}
+		if (inactive_upper_chunks.ShouldKillThread()) {
+			break;
+		}
 	}
 }
 
