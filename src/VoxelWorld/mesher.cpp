@@ -96,35 +96,47 @@ struct GreedyQuad {
 	const inline void append_verticies(PackedVector3Array &verts, PackedVector3Array &normals, const FaceDir::Dir &facedir, const INTSIZE &axis, const uint32_t &ao, const uint32_t &blocktype) {
 		const auto normal = FaceDir::NormalIndex(facedir);
 		const auto normalDir = FaceDir::Normal(facedir);
-		const auto v1ao = ((ao >> 0) & 1) + ((ao >> 1) & 1) + ((ao >> 3) & 1);
-		const auto v2ao = ((ao >> 3) & 1) + ((ao >> 6) & 1) + ((ao >> 7) & 1);
-		const auto v3ao = ((ao >> 5) & 1) + ((ao >> 8) & 1) + ((ao >> 7) & 1);
-		const auto v4ao = ((ao >> 1) & 1) + ((ao >> 2) & 1) + ((ao >> 5) & 1);
-		const auto v1 = voxel_vertex_t(FaceDir::WorldToSample(facedir, axis, x, y), v1ao, normal, blocktype);
-		const auto v2 = voxel_vertex_t(FaceDir::WorldToSample(facedir, axis, x + w, y), v2ao, normal, blocktype);
-		const auto v3 = voxel_vertex_t(FaceDir::WorldToSample(facedir, axis, x + w, y + h), v3ao, normal, blocktype);
-		const auto v4 = voxel_vertex_t(FaceDir::WorldToSample(facedir, axis, x, y + h), v4ao, normal, blocktype);
+		//const auto v1ao = ((ao >> 0) & 1) + ((ao >> 1) & 1) + ((ao >> 3) & 1);
+		//const auto v2ao = ((ao >> 3) & 1) + ((ao >> 6) & 1) + ((ao >> 7) & 1);
+		//const auto v3ao = ((ao >> 5) & 1) + ((ao >> 8) & 1) + ((ao >> 7) & 1);
+		//const auto v4ao = ((ao >> 1) & 1) + ((ao >> 2) & 1) + ((ao >> 5) & 1);
+		//const auto v1 = voxel_vertex_t(FaceDir::WorldToSample(facedir, axis, x, y), v1ao, normal, blocktype);
+		//const auto v2 = voxel_vertex_t(FaceDir::WorldToSample(facedir, axis, x + w, y), v2ao, normal, blocktype);
+		//const auto v3 = voxel_vertex_t(FaceDir::WorldToSample(facedir, axis, x + w, y + h), v3ao, normal, blocktype);
+		//const auto v4 = voxel_vertex_t(FaceDir::WorldToSample(facedir, axis, x, y + h), v4ao, normal, blocktype);
 
 		//std::array<voxel_vertex_t, 4> new_verts{v1, v2, v3, v4};
-		PackedVector3Array new_verts;
-		new_verts.append(FaceDir::WorldToSample(facedir, axis, x, y));
-		new_verts.append(FaceDir::WorldToSample(facedir, axis, x + w, y));
-		new_verts.append(FaceDir::WorldToSample(facedir, axis, x + w, y + h));
-		new_verts.append(FaceDir::WorldToSample(facedir, axis, x, y + h));
+		//PackedVector3Array new_verts;
+		//new_verts.append(FaceDir::WorldToSample(facedir, axis, x, y));
+		//new_verts.append(FaceDir::WorldToSample(facedir, axis, x + w, y));
+		//new_verts.append(FaceDir::WorldToSample(facedir, axis, x + w, y + h));
+		//new_verts.append(FaceDir::WorldToSample(facedir, axis, x, y + h));
 
-		PackedVector3Array new_normals;
-		new_normals.append(normalDir);
-		new_normals.append(normalDir);
-		new_normals.append(normalDir);
-		new_normals.append(normalDir);
+		//PackedVector3Array new_normals;
+		//new_normals.append(normalDir);
+		//new_normals.append(normalDir);
+		//new_normals.append(normalDir);
+		//new_normals.append(normalDir);
 
 		if (FaceDir::ReverseOrder(facedir)) {
 			//std::reverse(new_verts.begin() + 1, new_verts.end());
-			new_verts.reverse();
+			//new_verts.reverse();
 			// verts->append_range(new_verts);
+			verts.append_array(
+					{ FaceDir::WorldToSample(facedir, axis, x, y + h),
+							FaceDir::WorldToSample(facedir, axis, x + w, y + h),
+							FaceDir::WorldToSample(facedir, axis, x + w, y),
+							FaceDir::WorldToSample(facedir, axis, x, y) });
+		} else {
+			verts.append_array(
+					{ FaceDir::WorldToSample(facedir, axis, x, y),
+							FaceDir::WorldToSample(facedir, axis, x + w, y),
+							FaceDir::WorldToSample(facedir, axis, x + w, y + h),
+							FaceDir::WorldToSample(facedir, axis, x, y + h) });
 		}
-		verts.append_array(new_verts);
-		normals.append_array(new_normals);
+		normals.append_array({ normalDir, normalDir, normalDir, normalDir });
+		//verts.append_array(new_verts);
+		//normals.append_array(new_normals);
 	};
 
 	// Function to compute hash so unordered set works
@@ -132,21 +144,22 @@ struct GreedyQuad {
 
 PackedInt32Array generate_indices(const size_t &vertex_count) {
 	const size_t indices_count = vertex_count / 4;
-	Array indices; // Reserve space for 6 indices per quad
+	PackedInt32Array indices; // Reserve space for 6 indices per quad
 	indices.resize((indices_count * 6));
 	// indices.reserve(indices_count * 6); // Reserve space for 6 indices per quad
 
 	for (size_t vert_index = 0; vert_index <= indices_count; ++vert_index) {
-		const uint32_t base_index = static_cast<uint32_t>(vert_index) * 4;
-		std::array<uint32_t, 6> inds{ (base_index + 3), (base_index + 2), (base_index),
-			(base_index + 2), (base_index + 1), (base_index) };
-		//indices.append_array(inds);
-		indices.append(inds[0]);
-		indices.append(inds[1]);
-		indices.append(inds[2]);
-		indices.append(inds[3]);
-		indices.append(inds[4]);
-		indices.append(inds[5]);
+		const int32_t base_index = static_cast<int32_t>(vert_index) * 4;
+		//std::array<uint32_t, 6> inds{ (base_index + 3), (base_index + 2), (base_index),
+		//	(base_index + 2), (base_index + 1), (base_index) };
+		indices.append_array({ (base_index + 3), (base_index + 2), (base_index),
+				(base_index + 2), (base_index + 1), (base_index) });
+		//indices.append(inds[0]);
+		//indices.append(inds[1]);
+		//indices.append(inds[2]);
+		//indices.append(inds[3]);
+		//indices.append(inds[4]);
+		//indices.append(inds[5]);
 	}
 
 	return indices;
@@ -161,10 +174,10 @@ PackedInt32Array generate_indices(const size_t &vertex_count) {
 	return {0};
 } */
 
-uint32_t get_block_by_n(const uint32_t &x, const uint32_t &y, const uint32_t &z, const PackedInt32Array &voxels) {
+uint32_t get_block_by_n(const uint32_t &x, const uint32_t &y, const uint32_t &z, const std::vector<uint32_t> &voxels) {
 	uint32_t index = static_cast<uint32_t>(x + y * VoxelChunk::ChunkSize_P + z * VoxelChunk::ChunkSize_P * VoxelChunk::ChunkSize_P);
 	if (index < VoxelChunk::ChunkSize_P3) {
-		return voxels.get(index);
+		return voxels.at(index);
 	}
 	return 0;
 }
@@ -220,7 +233,7 @@ const std::array<uint32_t, 3> get_sample_pos(const size_t &axis, const Vector2 &
 	return sample_offset;
 }
 
-Array ChunkMesher::MeshChunk(PackedInt32Array &voxels, Ref<ArrayMesh> &mesh, bool &hasverts) {
+void ChunkMesher::MeshChunk(Array &mesh_data, std::vector<uint32_t> &voxels, Ref<ArrayMesh> &mesh, bool &hasverts) {
 	std::vector<GreedyQuad> greedy_quads;
 
 	std::array<std::array<std::array<INTSIZE, VoxelChunk::ChunkSize_P>, VoxelChunk::ChunkSize_P>, 3> *axis_cols = new std::array<std::array<std::array<INTSIZE, VoxelChunk::ChunkSize_P>, VoxelChunk::ChunkSize_P>, 3>();
@@ -230,7 +243,7 @@ Array ChunkMesher::MeshChunk(PackedInt32Array &voxels, Ref<ArrayMesh> &mesh, boo
 		for (size_t y = 0; y < VoxelChunk::ChunkSize_P; ++y) {
 			for (size_t x = 0; x < VoxelChunk::ChunkSize_P; ++x) {
 				uint32_t voxel_index = x + y * VoxelChunk::ChunkSize_P + z * VoxelChunk::ChunkSize_P * VoxelChunk::ChunkSize_P;
-				add_voxels_to_axis_cols(voxels.get(voxel_index), x, y, z, axis_cols);
+				add_voxels_to_axis_cols(voxels.at(voxel_index), x, y, z, axis_cols);
 			}
 		}
 	}
@@ -250,8 +263,6 @@ Array ChunkMesher::MeshChunk(PackedInt32Array &voxels, Ref<ArrayMesh> &mesh, boo
 	// data = std::array<std::unordered_map<INTSIZE, std::unordered_map<INTSIZE, std::array<INTSIZE, Chunk::ChunkSize>>>, 6>{
 	//     {{}, {}, {}, {}, {}, {}} // Initialize all maps to empty
 	// };
-	Array arrays;
-	arrays.resize(Mesh::ARRAY_MAX);
 	for (size_t axis = 0; axis < 6; ++axis) {
 		for (INTSIZE z = 0; z < VoxelChunk::ChunkSize; ++z) {
 			for (INTSIZE x = 0; x < VoxelChunk::ChunkSize; ++x) {
@@ -287,14 +298,14 @@ Array ChunkMesher::MeshChunk(PackedInt32Array &voxels, Ref<ArrayMesh> &mesh, boo
 					// voxelpos += Vector3{1, 1, 1};
 					uint32_t ao_index = 0;
 					uint32_t it_index = 0; // TODO: Fix AO
-					for (const auto &v : ADJACENT_AO_DIRS) {
+					/* for (const auto &v : ADJACENT_AO_DIRS) {
 						auto sample_offset = get_sample_pos(axis, v);
 						auto ao_block = get_block_by_n(nx + sample_offset[0], ny + sample_offset[1], nz + sample_offset[2], voxels);
 						if (ao_block != 0) {
 							ao_index |= uint32_t(1) << uint32_t(it_index);
 						}
 						it_index++;
-					}
+					} */
 
 					uint32_t currentBlock = ao_index | ((get_block_by_n(nx, ny, nz, voxels)) << uint32_t(9));
 
@@ -304,7 +315,9 @@ Array ChunkMesher::MeshChunk(PackedInt32Array &voxels, Ref<ArrayMesh> &mesh, boo
 		}
 	}
 	PackedVector3Array verts;
+	//verts.resize(1000);
 	PackedVector3Array normals;
+	//normals.resize(1000);
 	for (INTSIZE axis = 0; axis < 6; ++axis) {
 		const auto block_data = &data[axis]; // get the data for this axis
 		auto facedir = FaceDir::Back;
@@ -340,10 +353,10 @@ Array ChunkMesher::MeshChunk(PackedInt32Array &voxels, Ref<ArrayMesh> &mesh, boo
 			}
 		}
 	}
-	arrays[Mesh::ARRAY_VERTEX] = verts;
-	arrays[Mesh::ARRAY_NORMAL] = normals;
+	mesh_data[Mesh::ARRAY_VERTEX] = verts;
+	mesh_data[Mesh::ARRAY_NORMAL] = normals;
 	if (!verts.is_empty()) {
-		arrays[Mesh::ARRAY_INDEX] = generate_indices(verts.size());
+		mesh_data[Mesh::ARRAY_INDEX] = generate_indices(verts.size());
 		hasverts = true;
 	}
 	//mesh->call_deferred("add_surface_from_arrays", Mesh::PRIMITIVE_TRIANGLES, arrays);
@@ -352,7 +365,6 @@ Array ChunkMesher::MeshChunk(PackedInt32Array &voxels, Ref<ArrayMesh> &mesh, boo
 
 	delete axis_cols;
 	delete col_face_mask;
-	return arrays;
 }
 /*
 // CULLED MESHING APPROACH FOR MY SANITY SAKE
