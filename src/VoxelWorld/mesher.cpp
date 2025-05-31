@@ -233,7 +233,7 @@ const std::array<uint32_t, 3> get_sample_pos(const size_t &axis, const Vector2 &
 	return sample_offset;
 }
 
-void ChunkMesher::MeshChunk(Array &mesh_data, std::vector<uint32_t> &voxels, Ref<ArrayMesh> &mesh, bool &hasverts) {
+void ChunkMesher::MeshChunk(Array &mesh_data, std::vector<uint32_t> &voxels, bool &hasverts) {
 	std::vector<GreedyQuad> greedy_quads;
 
 	std::array<std::array<std::array<INTSIZE, VoxelChunk::ChunkSize_P>, VoxelChunk::ChunkSize_P>, 3> *axis_cols = new std::array<std::array<std::array<INTSIZE, VoxelChunk::ChunkSize_P>, VoxelChunk::ChunkSize_P>, 3>();
@@ -298,14 +298,14 @@ void ChunkMesher::MeshChunk(Array &mesh_data, std::vector<uint32_t> &voxels, Ref
 					// voxelpos += Vector3{1, 1, 1};
 					uint32_t ao_index = 0;
 					uint32_t it_index = 0; // TODO: Fix AO
-					/* for (const auto &v : ADJACENT_AO_DIRS) {
+					for (const auto &v : ADJACENT_AO_DIRS) {
 						auto sample_offset = get_sample_pos(axis, v);
 						auto ao_block = get_block_by_n(nx + sample_offset[0], ny + sample_offset[1], nz + sample_offset[2], voxels);
 						if (ao_block != 0) {
 							ao_index |= uint32_t(1) << uint32_t(it_index);
 						}
 						it_index++;
-					} */
+					}
 
 					uint32_t currentBlock = ao_index | ((get_block_by_n(nx, ny, nz, voxels)) << uint32_t(9));
 

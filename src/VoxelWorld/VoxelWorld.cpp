@@ -9,6 +9,7 @@
 #include "godot_cpp/classes/thread.hpp"
 #include "godot_cpp/classes/viewport.hpp"
 #include "godot_cpp/classes/worker_thread_pool.hpp"
+#include "godot_cpp/classes/world3d.hpp"
 #include "godot_cpp/core/class_db.hpp"
 #include "godot_cpp/core/memory.hpp"
 #include "godot_cpp/core/object.hpp"
@@ -34,7 +35,6 @@
 #include <vector>
 
 VoxelWorld::VoxelWorld() {
-	chunk_mutex.instantiate();
 	//threads.instantiate();
 }
 VoxelWorld::~VoxelWorld() {}
@@ -42,7 +42,6 @@ VoxelWorld::~VoxelWorld() {}
 void VoxelWorld::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("generate"), &VoxelWorld::generate);
 	ClassDB::bind_method(D_METHOD("gen_chunk", "position"), &VoxelWorld::gen_chunk);
-	ClassDB::bind_method(D_METHOD("add_chunk", "chunk"), &VoxelWorld::add_chunk);
 	ClassDB::bind_method(D_METHOD("has_chunk", "position"), &VoxelWorld::has_chunk);
 
 	ClassDB::bind_method(D_METHOD("set_view_distance", "view_distance"), &VoxelWorld::set_view_distance);
@@ -67,7 +66,7 @@ void VoxelWorld::init() {
 }
 void VoxelWorld::generate() {
 	// Generate the voxel world
-	uint32_t threadcount = 16;
+	uint32_t threadcount = 8;
 
 	for (size_t i = 0; i < threadcount; ++i) {
 		Ref<Thread> thread;
@@ -90,35 +89,30 @@ void VoxelWorld::generate() {
 void VoxelWorld::gen_new_chunk_threaded_queue(Vector3i pos) {
 	//godot::UtilityFunctions::print("Generating new chunk at ", pos, "\n");
 	VoxelChunk *chunk = memnew(VoxelChunk);
-	chunk_holder_node->add_child(chunk);
 	chunk->set_chunk_position(Vector3i(pos.x, pos.y, pos.z));
-	chunk->set_name("Chunk_" + Variant(pos.x).stringify() + "_" + Variant(pos.y).stringify() + "_" + Variant(pos.z).stringify());
+	chunk->set_world(get_world_3d());
 	add_chunk(chunk);
 }
 
 void VoxelWorld::add_chunk(VoxelChunk *chunk) {
 	//inactive_chunks.Push();
 	chunk->main_thread_init();
-	chunks[chunk->chunk_position] = chunk->get_path();
+	chunks[chunk->chunk_position] = chunk;
 	wait_tree_chunks.emplace_back(chunk);
 	//godot::UtilityFunctions::print("Added chunk at ", chunk->chunk_position, "\n");
 }
 void VoxelWorld::queue_chunk(VoxelChunk *chunk) {
 	//std::unique_lock<std::mutex> lock(mutex);
-	if (chunk->chunk_position.y == 0)
-		inactive_chunks.Push(chunk);
-	else
-		inactive_upper_chunks.Push(chunk);
+	inactive_chunks.Push(chunk);
 }
-void VoxelWorld::gen_chunk(const Vector3i &pos) {
+void VoxelWorld::gen_chunk(const Vector3i &pos, World3D *world) {
 	VoxelChunk *chunk = memnew(VoxelChunk);
-	chunk_holder_node->call_deferred("add_child", chunk);
 	chunk->main_thread_init();
 	chunk->set_chunk_position(pos);
-	chunk->call_deferred("set_name", "Chunk_" + Variant(pos.x).stringify() + "_" + Variant(pos.y).stringify() + "_" + Variant(pos.z).stringify());
+	chunk->set_world(world);
 	//mutex.lock();
-	chunks[pos] = NodePath("chunks/Chunk_" + Variant(pos.x).stringify() + "_" + Variant(pos.y).stringify() + "_" + Variant(pos.z).stringify());
-	chunk->init(this, noise, &Finished_chunks, pos); //TODO: Initialize the chunk
+	chunks[pos] = chunk;
+	chunk->init(this, noise); //TODO: Initialize the chunk
 	//mutex.unlock();
 }
 bool VoxelWorld::has_chunk(const Vector3i &pos) const {
@@ -144,61 +138,31 @@ void VoxelWorld::single_thread_generate() {
 		return;
 	if (!generating) {
 		generating = true;
-		Node *chunk_holder = memnew(Node);
-		chunk_holder->set_name("chunks");
-		add_child(chunk_holder);
-		chunk_holder_node = chunk_holder;
 		generate(); //TODO: figure out how to properly handle scene starts
 	}
 	for (size_t i = 0; i < wait_tree_chunks.size(); i++) {
 		VoxelChunk *c = wait_tree_chunks[i];
-		if (c->is_inside_tree() && c->is_node_ready() && c->is_visible_in_tree()) {
+		if (c) {
 			queue_chunk(c);
 			wait_tree_chunks.erase(wait_tree_chunks.begin() + i); // Remove the chunk from the list
 			i--; // Adjust the index after erasing an element
 		}
 	}
-	if (Finished_chunks.Count() > 0) {
-		meshResult *c = memnew(meshResult(Array(), Vector3i(0, 0, 0), false));
-		Finished_chunks.Pop(c);
-		if (chunks.find(c->position) == chunks.end()) {
-			//print_line("chunk not found in chunks map");
-			return;
-		}
-		NodePath chunkPath = chunks.at(c->position);
-
-		//print_line("chunk found in chunks map at " + chunkPath);
-		VoxelChunk *chunk = get_node<VoxelChunk>(chunkPath);
-		if (chunk) {
-			chunk->mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, c->mesh_data);
-			chunk->set_mesh(chunk->mesh);
-			if (c->should_gen_new_chunk) {
-				gen_new_chunk_threaded_queue(c->gen_new_pos);
-			}
-			chunk->set_chunk_position(c->position);
-
-			//print_line("chunk generated and set mesh");
-		}
-	}
-	if (!chunk_holder_node || (chunk_holder_node && !chunk_holder_node->is_node_ready()))
-		return;
 
 	std::vector<VoxelChunk *> chunks_to_unload;
 	Camera3D *cam = get_viewport()->get_camera_3d();
 	Vector3i cam_position = cam->get_global_position() / VoxelChunk::ChunkSize;
-	for (int32_t child_id = 0; child_id < chunk_holder_node->get_child_count(); ++child_id) {
-		VoxelChunk *child = (VoxelChunk *)chunk_holder_node->get_child(child_id);
-		if (child == nullptr) {
-			continue;
-		}
-		if (Vector3Util::DistanceXZTo(child->chunk_position, cam_position) >= float(view_distance) && child->get_mesh().is_valid()) {
-			chunks_to_unload.emplace_back(child);
+	for (auto &child : chunks) {
+		//print_line("Checking chunk at ", child.second->chunk_position);
+		if (Vector3Util::DistanceXZTo(child.second->chunk_position, cam_position) >= float(view_distance) && child.second->get_mesh().is_valid()) {
+			chunks_to_unload.emplace_back(child.second);
+			//print_line("Unloading chunk at ", child.second->chunk_position);
 			continue;
 		}
 	}
 	for (VoxelChunk *chunk : chunks_to_unload) {
-		chunk->queue_free();
 		chunks.erase(chunk->chunk_position);
+		memdelete(chunk);
 	}
 	int pos_x = cam_position.x;
 	int pos_z = cam_position.z;
@@ -239,7 +203,7 @@ void VoxelWorld::generate_chunk_thread_loop() {
 		//auto xDistance = std::abs(playerPos.x - chunk_pos.x) / VoxelChunk::ChunkSize;
 		//auto zDistance = std::abs(playerPos.z - chunk_pos.z) / VoxelChunk::ChunkSize;
 		//if (xDistance > view_distance || zDistance > view_distance)
-		c->init(this, noise, &Finished_chunks, Vector3i(c->chunk_position));
+		c->init(this, noise);
 		//else
 		//    work_group[i]->call_deferred("queue_free");
 		//}
