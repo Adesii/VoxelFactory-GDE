@@ -10,6 +10,7 @@
 #include "godot_cpp/core/defs.hpp"
 #include "godot_cpp/core/memory.hpp"
 #include "godot_cpp/variant/array.hpp"
+#include "godot_cpp/variant/packed_byte_array.hpp"
 #include "godot_cpp/variant/packed_int32_array.hpp"
 #include "godot_cpp/variant/packed_vector3_array.hpp"
 #include "godot_cpp/variant/typed_array.hpp"
@@ -93,13 +94,13 @@ struct GreedyQuad {
 			}
 		}
 	}
-	const inline void append_verticies(PackedVector3Array &verts, PackedVector3Array &normals, const FaceDir::Dir &facedir, const INTSIZE &axis, const uint32_t &ao, const uint32_t &blocktype) {
+	const inline void append_verticies(PackedVector3Array &verts, PackedVector3Array &normals, PackedFloat32Array &ao_type_array, const FaceDir::Dir &facedir, const INTSIZE &axis, const uint32_t &ao, const uint32_t &blocktype) {
 		const auto normal = FaceDir::NormalIndex(facedir);
 		const auto normalDir = FaceDir::Normal(facedir);
-		//const auto v1ao = ((ao >> 0) & 1) + ((ao >> 1) & 1) + ((ao >> 3) & 1);
-		//const auto v2ao = ((ao >> 3) & 1) + ((ao >> 6) & 1) + ((ao >> 7) & 1);
-		//const auto v3ao = ((ao >> 5) & 1) + ((ao >> 8) & 1) + ((ao >> 7) & 1);
-		//const auto v4ao = ((ao >> 1) & 1) + ((ao >> 2) & 1) + ((ao >> 5) & 1);
+		const uint32_t v1ao = ((((ao >> 0) & 1) + ((ao >> 1) & 1) + ((ao >> 3) & 1))) | (blocktype << 3);
+		const uint32_t v2ao = ((((ao >> 3) & 1) + ((ao >> 6) & 1) + ((ao >> 7) & 1))) | (blocktype << 3);
+		const uint32_t v3ao = ((((ao >> 5) & 1) + ((ao >> 8) & 1) + ((ao >> 7) & 1))) | (blocktype << 3);
+		const uint32_t v4ao = ((((ao >> 1) & 1) + ((ao >> 2) & 1) + ((ao >> 5) & 1))) | (blocktype << 3);
 		//const auto v1 = voxel_vertex_t(FaceDir::WorldToSample(facedir, axis, x, y), v1ao, normal, blocktype);
 		//const auto v2 = voxel_vertex_t(FaceDir::WorldToSample(facedir, axis, x + w, y), v2ao, normal, blocktype);
 		//const auto v3 = voxel_vertex_t(FaceDir::WorldToSample(facedir, axis, x + w, y + h), v3ao, normal, blocktype);
@@ -127,14 +128,17 @@ struct GreedyQuad {
 							FaceDir::WorldToSample(facedir, axis, x + w, y + h),
 							FaceDir::WorldToSample(facedir, axis, x + w, y),
 							FaceDir::WorldToSample(facedir, axis, x, y) });
+			ao_type_array.append_array({ static_cast<float>(v4ao), static_cast<float>(v3ao), static_cast<float>(v2ao), static_cast<float>(v1ao) });
 		} else {
 			verts.append_array(
 					{ FaceDir::WorldToSample(facedir, axis, x, y),
 							FaceDir::WorldToSample(facedir, axis, x + w, y),
 							FaceDir::WorldToSample(facedir, axis, x + w, y + h),
 							FaceDir::WorldToSample(facedir, axis, x, y + h) });
+			ao_type_array.append_array({ static_cast<float>(v1ao), static_cast<float>(v2ao), static_cast<float>(v3ao), static_cast<float>(v4ao) });
 		}
 		normals.append_array({ normalDir, normalDir, normalDir, normalDir });
+
 		//verts.append_array(new_verts);
 		//normals.append_array(new_normals);
 	};
@@ -317,6 +321,7 @@ void ChunkMesher::MeshChunk(Array &mesh_data, std::vector<uint32_t> &voxels, boo
 	PackedVector3Array verts;
 	//verts.resize(1000);
 	PackedVector3Array normals;
+	PackedFloat32Array ao_type_data;
 	//normals.resize(1000);
 	for (INTSIZE axis = 0; axis < 6; ++axis) {
 		const auto block_data = &data[axis]; // get the data for this axis
@@ -347,7 +352,7 @@ void ChunkMesher::MeshChunk(Array &mesh_data, std::vector<uint32_t> &voxels, boo
 			for (auto &[axis_pos, plane] : axis_plane) {
 				GreedyQuad::greedy_mesh_binary_plane(plane, greedy_quads);
 				for (auto quad : greedy_quads) {
-					quad.append_verticies(verts, normals, facedir, axis_pos, ao, block_type);
+					quad.append_verticies(verts, normals, ao_type_data, facedir, axis_pos, ao, block_type);
 				}
 				greedy_quads.clear();
 			}
@@ -355,6 +360,7 @@ void ChunkMesher::MeshChunk(Array &mesh_data, std::vector<uint32_t> &voxels, boo
 	}
 	mesh_data[Mesh::ARRAY_VERTEX] = verts;
 	mesh_data[Mesh::ARRAY_NORMAL] = normals;
+	mesh_data[Mesh::ARRAY_CUSTOM0] = ao_type_data;
 	if (!verts.is_empty()) {
 		mesh_data[Mesh::ARRAY_INDEX] = generate_indices(verts.size());
 		hasverts = true;

@@ -3,7 +3,7 @@ import os
 import sys
 
 from methods import print_error
-
+from SCons.Script import *
 
 libname = "VoxelFactory-GDE"
 projectdir = "demo"

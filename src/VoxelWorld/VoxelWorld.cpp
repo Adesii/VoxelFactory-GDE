@@ -46,11 +46,20 @@ void VoxelWorld::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("set_view_distance", "view_distance"), &VoxelWorld::set_view_distance);
 	ClassDB::bind_method(D_METHOD("get_view_distance"), &VoxelWorld::get_view_distance);
+
 	ClassDB::bind_method(D_METHOD("set_noise", "noise"), &VoxelWorld::set_noise);
 	ClassDB::bind_method(D_METHOD("get_noise"), &VoxelWorld::get_noise);
 
+	ClassDB::bind_method(D_METHOD("set_biome_noise", "biome_noise"), &VoxelWorld::set_biome_noise);
+	ClassDB::bind_method(D_METHOD("get_biome_noise"), &VoxelWorld::get_biome_noise);
+
+	ClassDB::bind_method(D_METHOD("set_material", "material"), &VoxelWorld::set_material);
+	ClassDB::bind_method(D_METHOD("get_material"), &VoxelWorld::get_material);
+
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "view_distance"), "set_view_distance", "get_view_distance");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "noise", godot::PROPERTY_HINT_RESOURCE_TYPE, "FastNoiseLite"), "set_noise", "get_noise");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "biome_noise", godot::PROPERTY_HINT_RESOURCE_TYPE, "FastNoiseLite"), "set_biome_noise", "get_biome_noise");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "material", godot::PROPERTY_HINT_RESOURCE_TYPE, "Material"), "set_material", "get_material");
 }
 void VoxelWorld::init() {
 	// Initialize the voxel world
@@ -112,7 +121,7 @@ void VoxelWorld::gen_chunk(const Vector3i &pos, World3D *world) {
 	chunk->set_world(world);
 	//mutex.lock();
 	chunks[pos] = chunk;
-	chunk->init(this, noise); //TODO: Initialize the chunk
+	chunk->init(this); //TODO: Initialize the chunk
 	//mutex.unlock();
 }
 bool VoxelWorld::has_chunk(const Vector3i &pos) const {
@@ -203,7 +212,7 @@ void VoxelWorld::generate_chunk_thread_loop() {
 		//auto xDistance = std::abs(playerPos.x - chunk_pos.x) / VoxelChunk::ChunkSize;
 		//auto zDistance = std::abs(playerPos.z - chunk_pos.z) / VoxelChunk::ChunkSize;
 		//if (xDistance > view_distance || zDistance > view_distance)
-		c->init(this, noise);
+		c->init(this);
 		//else
 		//    work_group[i]->call_deferred("queue_free");
 		//}
@@ -225,4 +234,18 @@ void VoxelWorld::set_noise(const Ref<FastNoiseLite> &p_noise) {
 }
 Ref<FastNoiseLite> VoxelWorld::get_noise() {
 	return noise;
+}
+
+void VoxelWorld::set_biome_noise(const Ref<FastNoiseLite> &p_noise) {
+	biome_noise = p_noise;
+}
+Ref<FastNoiseLite> VoxelWorld::get_biome_noise() {
+	return biome_noise;
+}
+
+void VoxelWorld::set_material(const Ref<Material> &p_material) {
+	material = p_material;
+}
+Ref<Material> VoxelWorld::get_material() {
+	return material;
 }

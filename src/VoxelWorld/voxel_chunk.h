@@ -79,7 +79,7 @@ public:
 		return ret;
 	}
 
-	void init(VoxelWorld *w, Ref<FastNoiseLite> g_world);
+	void init(VoxelWorld *w);
 
 	void main_thread_init();
 

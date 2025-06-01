@@ -47,6 +47,8 @@ public:
 	~VoxelWorld();
 
 	Ref<FastNoiseLite> noise;
+	Ref<FastNoiseLite> biome_noise;
+	Ref<Material> material;
 
 	void generate();
 
@@ -61,6 +63,12 @@ public:
 
 	void set_noise(const Ref<FastNoiseLite> &p_noise);
 	Ref<FastNoiseLite> get_noise();
+
+	void set_biome_noise(const Ref<FastNoiseLite> &p_biome_noise);
+	Ref<FastNoiseLite> get_biome_noise();
+
+	void set_material(const Ref<Material> &p_material);
+	Ref<Material> get_material();
 
 	void single_thread_generate();
 };

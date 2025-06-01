@@ -2,6 +2,7 @@
 #include "VoxelWorld.h"
 #include "godot_cpp/classes/array_mesh.hpp"
 #include "godot_cpp/classes/geometry_instance3d.hpp"
+#include "godot_cpp/classes/mesh.hpp"
 #include "godot_cpp/classes/mesh_instance3d.hpp"
 #include "godot_cpp/classes/mutex.hpp"
 #include "godot_cpp/classes/noise.hpp"
@@ -10,6 +11,7 @@
 #include "godot_cpp/core/memory.hpp"
 #include "godot_cpp/core/print_string.hpp"
 #include "godot_cpp/variant/array.hpp"
+#include "godot_cpp/variant/dictionary.hpp"
 #include "godot_cpp/variant/packed_float32_array.hpp"
 #include "godot_cpp/variant/packed_int32_array.hpp"
 #include "godot_cpp/variant/vector3.hpp"
@@ -37,7 +39,7 @@ void VoxelChunk::main_thread_init() {
 	//g_world->set_offset(Vector3i(chunk_position.x,chunk_position.z,0)*ChunkSize);
 }
 
-void VoxelChunk::init(VoxelWorld *w, Ref<FastNoiseLite> g_world) {
+void VoxelChunk::init(VoxelWorld *w) {
 	std::vector<uint32_t> local_voxels;
 	local_voxels.resize(ChunkSize_P3);
 	Vector3i swiffled_pos = Vector3i((chunk_position.z * ChunkSize), (chunk_position.x * ChunkSize), 0);
@@ -48,7 +50,7 @@ void VoxelChunk::init(VoxelWorld *w, Ref<FastNoiseLite> g_world) {
 	//g_world->set_offset(Vector3i(chunk_position.x,chunk_position.z,0)*ChunkSize);
 	for (size_t z = 0; z < ChunkSize_P; ++z) {
 		for (size_t x = 0; x < ChunkSize_P; ++x) {
-			float n = g_world->get_noise_2d(((float)swiffled_pos.x) + z, ((float)swiffled_pos.y) + x);
+			float n = w->noise->get_noise_2d(((float)swiffled_pos.x) + z, ((float)swiffled_pos.y) + x);
 			for (size_t y = 0; y < ChunkSize_P; ++y) {
 				size_t indexs = (z * ChunkSize_P + y) * ChunkSize_P + x;
 				//size_t xy_index = (z * ChunkSize_P + x); // y * ChunkSize + x
@@ -72,14 +74,14 @@ void VoxelChunk::init(VoxelWorld *w, Ref<FastNoiseLite> g_world) {
 					continue;
 				}
 				if (noise_point <= y + 1) {
-					//float othern = noiseOutputbiomemap.at(xy_index);
-					//if (othern < 0.5)
-					(local_voxels)[indexs] = { 1 };
-					//else
-					//    (voxels)[indexs] = {2};
+					float othern = w->biome_noise->get_noise_2d((((float)swiffled_pos.x) + z), (((float)swiffled_pos.y) + x));
+					if (othern > 0.5)
+						(local_voxels)[indexs] = { 1 };
+					else
+						(local_voxels)[indexs] = { 2 };
 					continue;
 				}
-				(local_voxels)[indexs] = { 2 };
+				(local_voxels)[indexs] = { 1 };
 				/*
 								if (pos.DistanceXZTo(Vector3I{30, 30, 30}) < 15)
 								{
@@ -111,7 +113,15 @@ void VoxelChunk::init(VoxelWorld *w, Ref<FastNoiseLite> g_world) {
 	if (has_verts) {
 		Ref<ArrayMesh> mesh;
 		mesh.instantiate();
-		mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, result->mesh_data);
+		Mesh::ArrayFormat format = (Mesh::ArrayFormat)(
+				Mesh::ARRAY_FORMAT_VERTEX |
+				Mesh::ARRAY_FORMAT_NORMAL |
+				Mesh::ARRAY_FORMAT_INDEX |
+				Mesh::ARRAY_FORMAT_CUSTOM0 |
+				Mesh::ARRAY_CUSTOM_R_FLOAT << Mesh::ARRAY_FORMAT_CUSTOM0_SHIFT);
+
+		mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, result->mesh_data, Array(), Dictionary(), format);
+		mesh->surface_set_material(0, w->material);
 		set_mesh(mesh, godot::GeometryInstance3D::GI_MODE_DISABLED, godot::RenderingServer::SHADOW_CASTING_SETTING_ON, 0);
 		set_parent_transform(transform);
 		//print_line("Generated Chunk");
