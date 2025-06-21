@@ -2,6 +2,7 @@
 #include "VoxelWorld.h"
 #include "godot_cpp/classes/array_mesh.hpp"
 #include "godot_cpp/classes/concave_polygon_shape3d.hpp"
+#include "godot_cpp/classes/geometry3d.hpp"
 #include "godot_cpp/classes/geometry_instance3d.hpp"
 #include "godot_cpp/classes/mesh.hpp"
 #include "godot_cpp/classes/mesh_instance3d.hpp"
@@ -135,6 +136,7 @@ void VoxelChunk::init(VoxelWorld *w) {
 		//set_parent_transform(transform);
 		//print_line("Generated Chunk");
 	}
+	memdelete(result);
 }
 
 void VoxelChunk::_notification(int what) {
@@ -317,16 +319,20 @@ void VoxelChunk::drop_collision() {
 	}
 }
 
-void VoxelChunk::set_collision_enabled(bool enable) {
+void VoxelChunk::set_collision_enabled(bool enable, float &time_since_last_collision_mesh_creation) {
 	if (_collision_enabled == enable) {
 		return;
 	}
-	if (!_static_body.is_valid()) {
-		if (!has_mesh())
+	if (!_static_body.is_valid() && enable == true) {
+		if (!has_mesh() || time_since_last_collision_mesh_creation < 0.2f)
 			return;
+		time_since_last_collision_mesh_creation = 0;
 		//generate the collision from render mesh
-		Array t = get_mesh()->surface_get_arrays(0);
-		Ref<ConcavePolygonShape3D> collision_shape = concave_util::create_concave_polygon_shape(to_span((PackedVector3Array)t[Mesh::ARRAY_VERTEX]), to_span((PackedInt32Array)t[Mesh::ARRAY_INDEX]));
+		//std::array<Array, 1> render_surfaces_s;
+		//render_surfaces_s[0] = get_mesh()->surface_get_arrays(0);
+		//Span<const Array> render_surfaces(render_surfaces_s.data(), 1);
+		//Ref<ConcavePolygonShape3D> collision_shape = concave_util::create_concave_polygon_shape(render_surfaces);
+		Ref<ConcavePolygonShape3D> collision_shape = get_mesh()->create_trimesh_shape();
 		print_line(collision_shape);
 		set_collision_shape(collision_shape, false, _voxel_world, 0.04f);
 	}

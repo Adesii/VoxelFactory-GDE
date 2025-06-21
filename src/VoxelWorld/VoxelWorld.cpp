@@ -164,7 +164,7 @@ void VoxelWorld::single_thread_generate(float delta) {
 
 	std::vector<VoxelChunk *> chunks_to_unload;
 	Camera3D *cam = get_viewport()->get_camera_3d();
-	Vector3i cam_position = cam->get_global_position() / VoxelChunk::ChunkSize_P;
+	Vector3i cam_position = cam->get_global_position() / VoxelChunk::ChunkSize;
 	for (auto &child : chunks) {
 		//print_line("Checking chunk at ", child.second->chunk_position);
 		if (Vector3Util::DistanceXZTo(child.second->chunk_position, cam_position) >= float(view_distance) && child.second->get_mesh().is_valid()) {
@@ -183,7 +183,6 @@ void VoxelWorld::single_thread_generate(float delta) {
 	x = y = dx = 0;
 	dy = -1;
 	int t = view_distance;
-	bool gen_col_this_frame = true;
 	int maxI = t * t;
 	time_since_last_generated_chunk += delta;
 	for (int i = 0; i < maxI; i++) {
@@ -196,13 +195,13 @@ void VoxelWorld::single_thread_generate(float delta) {
 				VoxelChunk *chunk = chunks[pos];
 				if (chunk->has_mesh()) {
 					bool brrr = (-2 <= x) && (x <= 2) && (-2 <= y) && (y <= 2);
-					if (brrr && gen_col_this_frame && !chunk->is_collision_enabled() && (time_since_last_generated_chunk > 0.1)) {
-						chunk->set_collision_enabled(brrr);
-						time_since_last_generated_chunk = 0;
-						gen_col_this_frame = false;
-					} else if (!brrr) {
-						chunk->set_collision_enabled(false);
-					}
+					//if (brrr && !chunk->is_collision_enabled()) {
+					chunk->set_collision_enabled(brrr, time_since_last_generated_chunk);
+					//} else if (!brrr) {
+					//	chunk->set_collision_enabled(false, time_since_last_generated_chunk);
+					//}
+				} else {
+					chunk->drop_collision();
 				}
 			}
 		}

@@ -147,13 +147,13 @@ struct GreedyQuad {
 };
 
 PackedInt32Array generate_indices(const size_t &vertex_count) {
-	const size_t indices_count = vertex_count / 4;
+	const size_t indices_count = (vertex_count - 1) / 4;
 	PackedInt32Array indices; // Reserve space for 6 indices per quad
-	indices.resize((indices_count * 6));
+	//indices.resize((indices_count * 6) - 12);
 	// indices.reserve(indices_count * 6); // Reserve space for 6 indices per quad
 
-	for (size_t vert_index = 0; vert_index <= indices_count; ++vert_index) {
-		const int32_t base_index = static_cast<int32_t>(vert_index) * 4;
+	for (int32_t vert_index = 0; vert_index <= indices_count; ++vert_index) {
+		const int32_t base_index = vert_index * 4;
 		//std::array<uint32_t, 6> inds{ (base_index + 3), (base_index + 2), (base_index),
 		//	(base_index + 2), (base_index + 1), (base_index) };
 		indices.append_array({ (base_index + 3), (base_index + 2), (base_index),

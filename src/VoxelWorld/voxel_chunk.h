@@ -127,6 +127,6 @@ public:
 	void drop_collision();
 	// TODO Collision layer and mask
 
-	void set_collision_enabled(bool enable);
+	void set_collision_enabled(bool enable, float &time_since_last_collision_mesh_creation);
 	bool is_collision_enabled() const;
 };
