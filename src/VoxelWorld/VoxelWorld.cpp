@@ -136,14 +136,17 @@ void VoxelWorld::_notification(int p_what) {
 			init();
 			break;
 		case NOTIFICATION_PHYSICS_PROCESS:
-			timesincence += get_physics_process_delta_time();
-			single_thread_generate();
+			auto delta = get_physics_process_delta_time();
+			timesincence += delta;
+			single_thread_generate(delta);
 			break;
 	}
 }
 bool generating = false;
 
-void VoxelWorld::single_thread_generate() {
+float time_since_last_generated_chunk = 0.0f;
+
+void VoxelWorld::single_thread_generate(float delta) {
 	if (timesincence <= 0.1f)
 		return;
 	if (!generating) {
@@ -161,7 +164,7 @@ void VoxelWorld::single_thread_generate() {
 
 	std::vector<VoxelChunk *> chunks_to_unload;
 	Camera3D *cam = get_viewport()->get_camera_3d();
-	Vector3i cam_position = cam->get_global_position() / VoxelChunk::ChunkSize;
+	Vector3i cam_position = cam->get_global_position() / VoxelChunk::ChunkSize_P;
 	for (auto &child : chunks) {
 		//print_line("Checking chunk at ", child.second->chunk_position);
 		if (Vector3Util::DistanceXZTo(child.second->chunk_position, cam_position) >= float(view_distance) && child.second->get_mesh().is_valid()) {
@@ -182,6 +185,7 @@ void VoxelWorld::single_thread_generate() {
 	int t = view_distance;
 	bool gen_col_this_frame = true;
 	int maxI = t * t;
+	time_since_last_generated_chunk += delta;
 	for (int i = 0; i < maxI; i++) {
 		if ((-view_distance <= x) && (x <= view_distance) && (-view_distance <= y) && (y <= view_distance)) {
 			auto pos = Vector3i(pos_x + x, 0, pos_z + y);
@@ -191,10 +195,13 @@ void VoxelWorld::single_thread_generate() {
 			} else {
 				VoxelChunk *chunk = chunks[pos];
 				if (chunk->has_mesh()) {
-					bool brrr = (-1 <= x) && (x <= 1) && (-1 <= y) && (y <= 1);
-					if (brrr && gen_col_this_frame && !chunk->is_collision_enabled()) {
+					bool brrr = (-2 <= x) && (x <= 2) && (-2 <= y) && (y <= 2);
+					if (brrr && gen_col_this_frame && !chunk->is_collision_enabled() && (time_since_last_generated_chunk > 0.1)) {
 						chunk->set_collision_enabled(brrr);
+						time_since_last_generated_chunk = 0;
 						gen_col_this_frame = false;
+					} else if (!brrr) {
+						chunk->set_collision_enabled(false);
 					}
 				}
 			}

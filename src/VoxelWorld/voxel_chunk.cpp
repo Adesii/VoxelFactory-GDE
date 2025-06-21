@@ -328,7 +328,7 @@ void VoxelChunk::set_collision_enabled(bool enable) {
 		Array t = get_mesh()->surface_get_arrays(0);
 		Ref<ConcavePolygonShape3D> collision_shape = concave_util::create_concave_polygon_shape(to_span((PackedVector3Array)t[Mesh::ARRAY_VERTEX]), to_span((PackedInt32Array)t[Mesh::ARRAY_INDEX]));
 		print_line(collision_shape);
-		set_collision_shape(collision_shape, true, _voxel_world, 0.04f);
+		set_collision_shape(collision_shape, false, _voxel_world, 0.04f);
 	}
 	if (_static_body.is_valid()) {
 		_static_body.set_shape_enabled(0, enable);

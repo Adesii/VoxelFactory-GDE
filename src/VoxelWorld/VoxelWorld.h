@@ -66,7 +66,7 @@ public:
 	void set_material(const Ref<Material> &p_material);
 	Ref<Material> get_material();
 
-	void single_thread_generate();
+	void single_thread_generate(float delta = 0);
 
 	void add_modification(AABB mod_aabb, int block_type);
 };
