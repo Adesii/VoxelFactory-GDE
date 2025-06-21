@@ -6,10 +6,8 @@ struct meshResult {
 public:
 	godot::Array mesh_data;
 	godot::Vector3i position;
-	godot::Vector3i gen_new_pos;
-	bool should_gen_new_chunk;
-	meshResult(godot::Array mesh, godot::Vector3i pos, bool should_gen) :
-			mesh_data(mesh), position(pos), should_gen_new_chunk(should_gen) {}
+	meshResult(godot::Array mesh, godot::Vector3i pos) :
+			mesh_data(mesh), position(pos) {}
 	~meshResult() {}
 	meshResult() {}
 };

@@ -13,6 +13,7 @@
 #include "godot_cpp/variant/vector3i.hpp"
 #include "util/direct_mesh_instance.h"
 #include "util/direct_static_body.h"
+#include <cstdint>
 using namespace godot;
 
 class VoxelWorld;
@@ -82,6 +83,12 @@ public:
 	void main_thread_init();
 
 	void _notification(int what);
+
+	void update_mesh();
+
+	bool set_voxel(Vector3i pos, uint32_t id);
+
+	void update_collision_shape();
 
 	///From Godot-Voxel-Engine.. can't be bothered wrapping it myself so im just stealing :)
 	/// Do check it out. really good way to do Voxel Rendering in Godot. i just like the painful way.

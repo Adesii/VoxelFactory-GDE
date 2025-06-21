@@ -11,10 +11,12 @@
 #include "godot_cpp/classes/worker_thread_pool.hpp"
 #include "godot_cpp/classes/world3d.hpp"
 #include "godot_cpp/core/class_db.hpp"
+#include "godot_cpp/core/math.hpp"
 #include "godot_cpp/core/memory.hpp"
 #include "godot_cpp/core/object.hpp"
 #include "godot_cpp/core/print_string.hpp"
 #include "godot_cpp/core/property_info.hpp"
+#include "godot_cpp/variant/aabb.hpp"
 #include "godot_cpp/variant/array.hpp"
 #include "godot_cpp/variant/callable.hpp"
 #include "godot_cpp/variant/callable_method_pointer.hpp"
@@ -28,9 +30,11 @@
 #include "util/MultiThreadQueues.h"
 #include "voxel_chunk.h"
 #include <array>
+#include <cmath>
 #include <complex>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <functional>
 #include <vector>
 
@@ -55,6 +59,8 @@ void VoxelWorld::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("set_material", "material"), &VoxelWorld::set_material);
 	ClassDB::bind_method(D_METHOD("get_material"), &VoxelWorld::get_material);
+
+	ClassDB::bind_method(D_METHOD("add_modification"), &VoxelWorld::add_modification);
 
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "view_distance"), "set_view_distance", "get_view_distance");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "noise", godot::PROPERTY_HINT_RESOURCE_TYPE, "FastNoiseLite"), "set_noise", "get_noise");
@@ -128,6 +134,12 @@ void VoxelWorld::gen_chunk(const Vector3i &pos, World3D *world) {
 bool VoxelWorld::has_chunk(const Vector3i &pos) const {
 	return chunks.find(pos) != chunks.end();
 }
+
+VoxelChunk *VoxelWorld::get_chunk(const Vector3i &pos) const {
+	if (!has_chunk(pos))
+		return nullptr;
+	return chunks.find(pos)->second;
+}
 float timesincence = 0.0f;
 
 void VoxelWorld::_notification(int p_what) {
@@ -192,7 +204,10 @@ void VoxelWorld::single_thread_generate(float delta) {
 			if (!has_chunk(pos)) {
 				gen_new_chunk_threaded_queue(pos);
 			} else {
-				VoxelChunk *chunk = chunks[pos];
+				VoxelChunk *chunk = get_chunk(pos);
+				if (!chunk) {
+					continue;
+				}
 				if (chunk->has_mesh()) {
 					bool brrr = (-2 <= x) && (x <= 2) && (-2 <= y) && (y <= 2);
 					//if (brrr && !chunk->is_collision_enabled()) {
@@ -268,6 +283,53 @@ Ref<Material> VoxelWorld::get_material() {
 	return material;
 }
 
-void VoxelWorld::add_modification(AABB mod_aabb, int block_type) {
-	//Gather all affected chunks so that non-generated chunks know they need to change something before meshing
+void _apply_mods_on_chunk(VoxelChunk *chunk, AABB mod_aabb, int block_type) {
+	Vector3 temps = chunk->transform.affine_inverse().xform(mod_aabb.position) - (mod_aabb.size / 2);
+
+	//print_line("chunk_corrected pos:" + temps);
+
+	int32_t pos_x = temps.x + 2;
+	int32_t pos_y = temps.y + 2;
+	int32_t pos_z = temps.z + 2;
+	int32_t x_size_iter = pos_x + mod_aabb.size.x;
+	int32_t y_size_iter = pos_y + mod_aabb.size.y;
+	int32_t z_size_iter = pos_z + mod_aabb.size.z;
+	bool actual_changed = false;
+	for (int32_t x = pos_x; x <= x_size_iter; x++) {
+		for (int32_t y = pos_y; y <= y_size_iter; y++) {
+			for (int32_t z = pos_z; z <= z_size_iter; z++) {
+				Vector3i voxel_pos = Vector3i(x, y, z);
+				//print_line(voxel_pos);
+
+				bool changed = chunk->set_voxel(voxel_pos, 0);
+				if (changed) {
+					actual_changed = true;
+				}
+			}
+		}
+	}
+	if (!actual_changed)
+		return;
+	chunk->update_mesh();
+	chunk->update_collision_shape();
+}
+
+void VoxelWorld::add_modification(AABB mod_aabb, Vector3i hit_chunk_pos, int block_type) {
+	VoxelChunk *chunk = get_chunk(hit_chunk_pos);
+	if (!chunk) {
+		return;
+	}
+	_apply_mods_on_chunk(chunk, mod_aabb, block_type);
+
+	for (int dx = -1; dx <= 1; dx++) {
+		for (int dy = -1; dy <= 1; dy++) {
+			for (int dz = -1; dz <= 1; dz++) {
+				Vector3i neighbor_pos = hit_chunk_pos + Vector3i(dx, dy, dz);
+				VoxelChunk *neighbor_chunk = get_chunk(neighbor_pos);
+				if (neighbor_chunk) {
+					_apply_mods_on_chunk(neighbor_chunk, mod_aabb, block_type);
+				}
+			}
+		}
+	}
 }

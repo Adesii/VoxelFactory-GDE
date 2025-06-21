@@ -51,6 +51,7 @@ public:
 	void add_chunk(VoxelChunk *chunk);
 	void gen_chunk(const Vector3i &pos, World3D *world);
 	bool has_chunk(const Vector3i &pos) const;
+	VoxelChunk *get_chunk(const Vector3i &pos) const;
 	void queue_chunk(VoxelChunk *chunk);
 	void gen_new_chunk_threaded_queue(Vector3i pos);
 
@@ -68,5 +69,5 @@ public:
 
 	void single_thread_generate(float delta = 0);
 
-	void add_modification(AABB mod_aabb, int block_type);
+	void add_modification(AABB mod_aabb, Vector3i hit_chunk_pos, int block_type);
 };

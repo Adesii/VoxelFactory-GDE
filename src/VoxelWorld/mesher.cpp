@@ -178,10 +178,10 @@ PackedInt32Array generate_indices(const size_t &vertex_count) {
 	return {0};
 } */
 
-uint32_t get_block_by_n(const uint32_t &x, const uint32_t &y, const uint32_t &z, const std::vector<uint32_t> &voxels) {
+uint32_t get_block_by_n(const uint32_t &x, const uint32_t &y, const uint32_t &z, const PackedInt32Array &voxels) {
 	uint32_t index = static_cast<uint32_t>(x + y * VoxelChunk::ChunkSize_P + z * VoxelChunk::ChunkSize_P * VoxelChunk::ChunkSize_P);
 	if (index < VoxelChunk::ChunkSize_P3) {
-		return voxels.at(index);
+		return voxels.get(index);
 	}
 	return 0;
 }
@@ -237,7 +237,7 @@ const std::array<uint32_t, 3> get_sample_pos(const size_t &axis, const Vector2 &
 	return sample_offset;
 }
 
-void ChunkMesher::MeshChunk(Array &mesh_data, std::vector<uint32_t> &voxels, bool &hasverts) {
+void ChunkMesher::MeshChunk(Array &mesh_data, PackedInt32Array &voxels, bool &hasverts) {
 	std::vector<GreedyQuad> greedy_quads;
 
 	std::array<std::array<std::array<INTSIZE, VoxelChunk::ChunkSize_P>, VoxelChunk::ChunkSize_P>, 3> *axis_cols = new std::array<std::array<std::array<INTSIZE, VoxelChunk::ChunkSize_P>, VoxelChunk::ChunkSize_P>, 3>();
@@ -247,7 +247,7 @@ void ChunkMesher::MeshChunk(Array &mesh_data, std::vector<uint32_t> &voxels, boo
 		for (size_t y = 0; y < VoxelChunk::ChunkSize_P; ++y) {
 			for (size_t x = 0; x < VoxelChunk::ChunkSize_P; ++x) {
 				uint32_t voxel_index = x + y * VoxelChunk::ChunkSize_P + z * VoxelChunk::ChunkSize_P * VoxelChunk::ChunkSize_P;
-				add_voxels_to_axis_cols(voxels.at(voxel_index), x, y, z, axis_cols);
+				add_voxels_to_axis_cols(voxels.get(voxel_index), x, y, z, axis_cols);
 			}
 		}
 	}

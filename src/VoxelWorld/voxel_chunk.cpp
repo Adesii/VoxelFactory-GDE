@@ -25,6 +25,7 @@
 #include "util/concave_polygon_shape_3d.h"
 #include "util/packed_arrays.h"
 #include "util/span.h"
+#include <algorithm>
 #include <cstdint>
 #include <vector>
 void VoxelChunk::_bind_methods() {
@@ -45,6 +46,7 @@ void VoxelChunk::main_thread_init() {
 }
 
 void VoxelChunk::init(VoxelWorld *w) {
+	_voxel_world = w;
 	std::vector<uint32_t> local_voxels;
 	local_voxels.resize(ChunkSize_P3);
 	Vector3i swiffled_pos = Vector3i((chunk_position.z * ChunkSize), (chunk_position.x * ChunkSize), 0);
@@ -100,21 +102,24 @@ void VoxelChunk::init(VoxelWorld *w) {
 		}
 	}
 
+	if (should_gen_chunk_above) {
+		w->gen_chunk(chunk_above, *_world);
+	}
+
+	int32_t *dst_data = voxels.ptrw();
+	// static_assert(sizeof(dst_data) == sizeof(T));
+	memcpy(dst_data, local_voxels.data(), local_voxels.size() * sizeof(uint32_t));
+
+	//ApplyUpdates
+	update_mesh();
+}
+
+void VoxelChunk::update_mesh() {
 	ChunkMesher mesher;
 	meshResult *result = memnew(meshResult);
-	if (should_gen_chunk_above) {
-		//print_line("Generating chunk above for position: ", chunk_above);
-		//generate_chunk_above(voxels, noiseOutputbiomemap, mesh);
-		w->gen_chunk(chunk_above, *_world);
-		//result->gen_new_pos = chunk_above;
-		result->should_gen_new_chunk = false;
-	} else {
-		result->should_gen_new_chunk = false;
-		result->gen_new_pos = Vector3i(0, 0, 0);
-	}
 	bool has_verts = false;
 	result->mesh_data.resize(Mesh::ARRAY_MAX);
-	mesher.MeshChunk(result->mesh_data, local_voxels, has_verts);
+	mesher.MeshChunk(result->mesh_data, voxels, has_verts);
 	if (has_verts) {
 		Ref<ArrayMesh> mesh;
 		mesh.instantiate();
@@ -126,7 +131,7 @@ void VoxelChunk::init(VoxelWorld *w) {
 				Mesh::ARRAY_CUSTOM_R_FLOAT << Mesh::ARRAY_FORMAT_CUSTOM0_SHIFT);
 
 		mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, result->mesh_data, Array(), Dictionary(), format);
-		mesh->surface_set_material(0, w->material);
+		mesh->surface_set_material(0, _voxel_world->material);
 		set_mesh(mesh, godot::GeometryInstance3D::GI_MODE_DISABLED, godot::RenderingServer::SHADOW_CASTING_SETTING_ON, 0);
 		//print_line(is.size());
 		set_parent_transform(transform);
@@ -136,7 +141,13 @@ void VoxelChunk::init(VoxelWorld *w) {
 		//set_parent_transform(transform);
 		//print_line("Generated Chunk");
 	}
+
 	memdelete(result);
+}
+
+void VoxelChunk::update_collision_shape() {
+	Ref<ConcavePolygonShape3D> collision_shape = get_mesh()->create_trimesh_shape();
+	set_collision_shape(collision_shape, false, _voxel_world, 0.04f);
 }
 
 void VoxelChunk::_notification(int what) {
@@ -152,6 +163,15 @@ void VoxelChunk::_notification(int what) {
 			break;
 
 	} */
+}
+
+bool VoxelChunk::set_voxel(Vector3i pos, uint32_t id) {
+	if (pos.x >= 0 && pos.y >= 0 && pos.z >= 0 && pos.x < ChunkSize_P && pos.y < ChunkSize_P && pos.z < ChunkSize_P) {
+		size_t indexs = (pos.z * ChunkSize_P + pos.y) * ChunkSize_P + pos.x;
+		voxels[indexs] = id;
+		return true;
+	}
+	return false;
 }
 
 ///Godot-Voxel-Engine code:
