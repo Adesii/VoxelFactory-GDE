@@ -1,26 +1,30 @@
 #include "voxel_chunk.h"
 #include "VoxelWorld.h"
 #include "godot_cpp/classes/array_mesh.hpp"
+#include "godot_cpp/classes/concave_polygon_shape3d.hpp"
 #include "godot_cpp/classes/geometry_instance3d.hpp"
 #include "godot_cpp/classes/mesh.hpp"
 #include "godot_cpp/classes/mesh_instance3d.hpp"
-#include "godot_cpp/classes/mutex.hpp"
 #include "godot_cpp/classes/noise.hpp"
+#include "godot_cpp/classes/physics_server3d_extension.hpp"
 #include "godot_cpp/classes/ref.hpp"
 #include "godot_cpp/classes/rendering_server.hpp"
+#include "godot_cpp/classes/world3d.hpp"
 #include "godot_cpp/core/memory.hpp"
 #include "godot_cpp/core/print_string.hpp"
 #include "godot_cpp/variant/array.hpp"
 #include "godot_cpp/variant/dictionary.hpp"
 #include "godot_cpp/variant/packed_float32_array.hpp"
 #include "godot_cpp/variant/packed_int32_array.hpp"
+#include "godot_cpp/variant/packed_vector3_array.hpp"
 #include "godot_cpp/variant/vector3.hpp"
 #include "godot_cpp/variant/vector3i.hpp"
 #include "mesh_result.h"
 #include "mesher.h"
-#include "util/MultiThreadQueues.h"
+#include "util/concave_polygon_shape_3d.h"
+#include "util/packed_arrays.h"
+#include "util/span.h"
 #include <cstdint>
-#include <mutex>
 #include <vector>
 void VoxelChunk::_bind_methods() {
 	// Bind methods here if needed
@@ -123,7 +127,12 @@ void VoxelChunk::init(VoxelWorld *w) {
 		mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, result->mesh_data, Array(), Dictionary(), format);
 		mesh->surface_set_material(0, w->material);
 		set_mesh(mesh, godot::GeometryInstance3D::GI_MODE_DISABLED, godot::RenderingServer::SHADOW_CASTING_SETTING_ON, 0);
+		//print_line(is.size());
 		set_parent_transform(transform);
+		/* Ref<ConcavePolygonShape3D> collision_shape = concave_util::create_concave_polygon_shape(to_span((PackedVector3Array)result->mesh_data[Mesh::ARRAY_VERTEX]), to_span((PackedInt32Array)result->mesh_data[Mesh::ARRAY_INDEX]));
+		set_collision_shape(collision_shape, false, w, 0.04f);
+		set_collision_enabled(true); */
+		//set_parent_transform(transform);
 		//print_line("Generated Chunk");
 	}
 }
@@ -152,9 +161,9 @@ void VoxelChunk::set_world(Ref<World3D> p_world) {
 		// To update world. I replaced visibility by presence in world because Godot 3 culling performance is horrible
 		_set_visible(_visible && _parent_visible);
 
-		//if (_static_body.is_valid()) {
-		//	_static_body.set_world(*p_world);
-		//}
+		if (_static_body.is_valid()) {
+			_static_body.set_world(*p_world);
+		}
 	}
 }
 
@@ -235,12 +244,98 @@ void VoxelChunk::set_parent_visible(bool parent_visible) {
 }
 
 void VoxelChunk::set_parent_transform(const Transform3D &parent_transform) {
-	if (_mesh_instance.is_valid()) {
+	if (_mesh_instance.is_valid() || _static_body.is_valid()) {
 		const Transform3D local_transform(Basis(), Vector3(0, 0, 0));
 		const Transform3D world_transform = parent_transform * local_transform;
 
 		if (_mesh_instance.is_valid()) {
 			_mesh_instance.set_transform(world_transform);
 		}
+		if (_static_body.is_valid()) {
+			_static_body.set_transform(world_transform);
+		}
 	}
+}
+
+void VoxelChunk::set_collision_shape(Ref<Shape3D> shape, bool debug_collision, const Node3D *node, float margin) {
+	ERR_FAIL_COND(node == nullptr);
+	//ERR_FAIL_COND_MSG(node->get_world_3d() != _world, "Physics body and attached node must be from the same world");
+
+	if (shape.is_null()) {
+		drop_collision();
+		return;
+	}
+
+	if (!_static_body.is_valid()) {
+		_static_body.create();
+		_static_body.set_world(*_world);
+		// This allows collision signals to provide the terrain node in the `collider` field
+		_static_body.set_attached_object(node);
+		if (_static_body.is_valid()) {
+			_static_body.set_transform(transform);
+		}
+
+	} else {
+		_static_body.remove_shape(0);
+	}
+
+	shape->set_margin(margin);
+
+	_static_body.add_shape(shape);
+	_static_body.set_debug(debug_collision, *_world);
+	_static_body.set_shape_enabled(0, _collision_enabled);
+}
+
+bool VoxelChunk::has_collision_shape() const {
+	return _static_body.is_valid();
+}
+
+void VoxelChunk::set_collision_layer(int layer) {
+	if (_static_body.is_valid()) {
+		_static_body.set_collision_layer(layer);
+	}
+}
+
+void VoxelChunk::set_collision_mask(int mask) {
+	if (_static_body.is_valid()) {
+		_static_body.set_collision_mask(mask);
+	}
+}
+
+void VoxelChunk::set_collision_margin(float margin) {
+	if (_static_body.is_valid()) {
+		Ref<Shape3D> shape = _static_body.get_shape(0);
+		if (shape.is_valid()) {
+			shape->set_margin(margin);
+		}
+	}
+}
+
+void VoxelChunk::drop_collision() {
+	if (_static_body.is_valid()) {
+		_static_body.destroy();
+	}
+}
+
+void VoxelChunk::set_collision_enabled(bool enable) {
+	if (_collision_enabled == enable) {
+		return;
+	}
+	if (!_static_body.is_valid()) {
+		if (!has_mesh())
+			return;
+		//generate the collision from render mesh
+		Array t = get_mesh()->surface_get_arrays(0);
+		Ref<ConcavePolygonShape3D> collision_shape = concave_util::create_concave_polygon_shape(to_span((PackedVector3Array)t[Mesh::ARRAY_VERTEX]), to_span((PackedInt32Array)t[Mesh::ARRAY_INDEX]));
+		print_line(collision_shape);
+		set_collision_shape(collision_shape, true, _voxel_world, 0.04f);
+	}
+	if (_static_body.is_valid()) {
+		_static_body.set_shape_enabled(0, enable);
+	}
+	_collision_enabled = enable;
+}
+
+bool VoxelChunk::is_collision_enabled() const {
+	return _collision_enabled;
 }

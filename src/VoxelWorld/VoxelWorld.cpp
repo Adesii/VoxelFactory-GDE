@@ -105,6 +105,7 @@ void VoxelWorld::gen_new_chunk_threaded_queue(Vector3i pos) {
 
 void VoxelWorld::add_chunk(VoxelChunk *chunk) {
 	//inactive_chunks.Push();
+	chunk->_voxel_world = this;
 	chunk->main_thread_init();
 	chunks[chunk->chunk_position] = chunk;
 	wait_tree_chunks.emplace_back(chunk);
@@ -179,6 +180,7 @@ void VoxelWorld::single_thread_generate() {
 	x = y = dx = 0;
 	dy = -1;
 	int t = view_distance;
+	bool gen_col_this_frame = true;
 	int maxI = t * t;
 	for (int i = 0; i < maxI; i++) {
 		if ((-view_distance <= x) && (x <= view_distance) && (-view_distance <= y) && (y <= view_distance)) {
@@ -186,8 +188,18 @@ void VoxelWorld::single_thread_generate() {
 			//print_line("Checking chunk at ", pos, " iterator:", x, ",", y);
 			if (!has_chunk(pos)) {
 				gen_new_chunk_threaded_queue(pos);
+			} else {
+				VoxelChunk *chunk = chunks[pos];
+				if (chunk->has_mesh()) {
+					bool brrr = (-1 <= x) && (x <= 1) && (-1 <= y) && (y <= 1);
+					if (brrr && gen_col_this_frame && !chunk->is_collision_enabled()) {
+						chunk->set_collision_enabled(brrr);
+						gen_col_this_frame = false;
+					}
+				}
 			}
 		}
+
 		if ((x == y) || ((x < 0) && (x == -y)) || ((x > 0) && (x == 1 - y))) {
 			t = dx;
 			dx = -dy;
@@ -248,4 +260,8 @@ void VoxelWorld::set_material(const Ref<Material> &p_material) {
 }
 Ref<Material> VoxelWorld::get_material() {
 	return material;
+}
+
+void VoxelWorld::add_modification(AABB mod_aabb, int block_type) {
+	//Gather all affected chunks so that non-generated chunks know they need to change something before meshing
 }

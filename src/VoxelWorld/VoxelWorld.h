@@ -1,14 +1,10 @@
 #pragma once
 
 #include "godot_cpp/classes/fast_noise_lite.hpp"
-#include "godot_cpp/classes/mutex.hpp"
 #include "godot_cpp/classes/node3d.hpp"
 #include "godot_cpp/classes/ref.hpp"
 #include "godot_cpp/classes/thread.hpp"
-#include "godot_cpp/variant/array.hpp"
-#include "godot_cpp/variant/node_path.hpp"
-#include "godot_cpp/variant/typed_dictionary.hpp"
-#include "godot_cpp/variant/variant.hpp"
+#include "godot_cpp/variant/aabb.hpp"
 #include "godot_cpp/variant/vector3i.hpp"
 #include "mesh_result.h"
 #include "util/MultiThreadQueues.h"
@@ -71,4 +67,6 @@ public:
 	Ref<Material> get_material();
 
 	void single_thread_generate();
+
+	void add_modification(AABB mod_aabb, int block_type);
 };

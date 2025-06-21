@@ -1,24 +1,18 @@
 #pragma once
 
 #include "godot_cpp/classes/array_mesh.hpp"
-#include "godot_cpp/classes/fast_noise_lite.hpp"
 #include "godot_cpp/classes/mesh.hpp"
 #include "godot_cpp/classes/mesh_instance3d.hpp"
 #include "godot_cpp/classes/mutex.hpp"
 #include "godot_cpp/classes/ref.hpp"
-#include "godot_cpp/classes/visual_instance3d.hpp"
+#include "godot_cpp/classes/shape3d.hpp"
 #include "godot_cpp/classes/world3d.hpp"
-#include "godot_cpp/core/class_db.hpp"
-#include "godot_cpp/core/memory.hpp"
 #include "godot_cpp/variant/packed_int32_array.hpp"
 #include "godot_cpp/variant/transform3d.hpp"
 #include "godot_cpp/variant/vector3.hpp"
 #include "godot_cpp/variant/vector3i.hpp"
-#include "mesh_result.h"
-#include "util/MultiThreadQueues.h"
 #include "util/direct_mesh_instance.h"
-#include "voxel.h"
-#include <mutex>
+#include "util/direct_static_body.h"
 using namespace godot;
 
 class VoxelWorld;
@@ -53,6 +47,10 @@ protected:
 
 public:
 	DirectMeshInstance _mesh_instance;
+	DirectStaticBody _static_body;
+
+	VoxelWorld *_voxel_world;
+
 	Transform3D transform;
 	Vector3 threaded_global_pos = Vector3(0, 0, 0);
 	VoxelChunk();
@@ -119,4 +117,16 @@ public:
 
 	void set_parent_visible(bool parent_visible);
 	void set_parent_transform(const Transform3D &parent_transform);
+	// Collisions
+
+	void set_collision_shape(Ref<Shape3D> shape, bool debug_collision, const Node3D *node, float margin);
+	bool has_collision_shape() const;
+	void set_collision_layer(int layer);
+	void set_collision_mask(int mask);
+	void set_collision_margin(float margin);
+	void drop_collision();
+	// TODO Collision layer and mask
+
+	void set_collision_enabled(bool enable);
+	bool is_collision_enabled() const;
 };
